@@ -348,6 +348,15 @@ class ArcWidget(QWidget):
         text_r     = r * (1.0 - TEXT_FRAC * 0.5)
         font_sz    = max(7, int(r * TEXT_FRAC * 0.40))
 
+        # Shrink font until the label fits within the available arc length
+        label = _time_label(self._seconds)
+        while font_sz > 7:
+            _fm = QFontMetricsF(QFont("Segoe UI", font_sz))
+            total_w = sum(_fm.horizontalAdvance(ch) for ch in label)
+            if total_w / text_r <= span * 0.92:
+                break
+            font_sz -= 1
+
         hours_done = int(min(self._seconds // 3600, MAX_HOURS))
         min_frac   = ((self._seconds // 60) % 60) / 60.0
 
@@ -437,8 +446,7 @@ class ArcWidget(QWidget):
         p.drawLine(int(cx), int(cy),
                    int(cx + r * math.cos(end)),   int(cy + r * math.sin(end)))
 
-        # Word text (curved for arc positions; straight-rotated for L/R)
-        label = _time_label(self._seconds)
+        # Word text curved along the outer arc ring
         alpha = 0.68 if not self._dim else 0.30
         if self._light_mode:
             txt_c = QColor(45, 25, 8, int(220 * alpha))
