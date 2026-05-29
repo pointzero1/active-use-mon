@@ -255,6 +255,11 @@ class ArcWidget(QWidget):
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         menu = QMenu(self)
         menu.setStyleSheet(MENU_STYLE)
+        if self.on_double_click:
+            projects_act = QAction("Show / hide projects", menu)
+            projects_act.triggered.connect(self.on_double_click)
+            menu.addAction(projects_act)
+            menu.addSeparator()
         for pos_id, label in SNAP_POSITIONS:
             act = QAction(f"Snap → {label}", menu)
             act.triggered.connect(lambda _=False, c=pos_id: self.snap_to(c))
