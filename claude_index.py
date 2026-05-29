@@ -138,8 +138,11 @@ def _load_cache(cache_path: str) -> dict:
 
 
 def _save_cache(cache_path: str, cache: dict) -> None:
-    with open(cache_path, "w", encoding="utf-8") as fh:
-        json.dump(cache, fh)
+    try:
+        with open(cache_path, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh)
+    except OSError:
+        pass
 
 
 def _merge(base: dict, other: dict) -> None:
@@ -216,10 +219,22 @@ def build_index(transcripts_root: str = TRANSCRIPTS_ROOT,
 def refresh(transcripts_root: str = TRANSCRIPTS_ROOT,
             index_path: str = INDEX_PATH,
             cache_path: str = CACHE_PATH) -> dict:
-    """Build the index and write it to index_path. Returns the index."""
+    """Build the index and write it to index_path atomically. Returns the index.
+
+    A write failure (locked file, full disk) is swallowed so it can never crash
+    the host widget; the previous index file is left intact on failure.
+    """
     index = build_index(transcripts_root, cache_path)
-    with open(index_path, "w", encoding="utf-8") as fh:
-        json.dump(index, fh, indent=2)
+    tmp = index_path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(index, fh, indent=2)
+        os.replace(tmp, index_path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
     return index
 
 

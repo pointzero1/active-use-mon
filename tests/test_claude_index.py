@@ -184,3 +184,28 @@ def test_filter_index_matches_project_and_session():
     out2 = filter_index(index, "lala")
     assert len(out2["projects"]) == 1 and out2["projects"][0]["name"] == "lalatine"
     assert filter_index(index, "")["projects"] == index["projects"]
+
+
+def test_extract_session_empty_file(tmp_path):
+    p = tmp_path / "empty.jsonl"
+    p.write_text("", encoding="utf-8")
+    s = extract_session(str(p))
+    assert s["session_id"] == "empty"
+    assert s["cwd"] is None
+    assert s["title"] == ""
+    assert s["skills"] == [] and s["files"] == []
+    assert s["started"] is None and s["last_active"] is None
+
+
+def test_refresh_write_failure_does_not_raise(tmp_path):
+    root = tmp_path / "projects"
+    d = root / "C--dev-lalatine"
+    d.mkdir(parents=True)
+    _write_jsonl(d / "s1.jsonl", [
+        {"type": "user", "cwd": r"C:\dev\lalatine", "timestamp": "2026-05-03T08:00:00Z",
+         "message": {"content": "x"}}])
+    bad_index = tmp_path / "no_such_dir" / "index.json"  # parent missing
+    cache = tmp_path / "cache.json"
+    index = refresh(str(root), str(bad_index), str(cache))  # must not raise
+    assert "projects" in index
+    assert not bad_index.exists()
