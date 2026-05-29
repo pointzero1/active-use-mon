@@ -37,7 +37,8 @@ from projects_panel import ProjectsPanel
 POLL_MS  = 1_000
 MAX_HOURS = 8
 SIZE     = 150          # corner widget side-length / corner arc radius
-HALF     = SIZE // 2    # edge-position arc radius / widget height
+EDGE_R   = 140          # half-circle radius for edge positions (T/B/L/R)
+EDGE_D   = EDGE_R * 2  # wide dimension of edge widgets
 
 TEXT_FRAC    = 0.22             # fraction of radius used by the outer text ring
 BAND_R_FRAC  = 1.0 - TEXT_FRAC # bands live from 0 → this fraction of radius
@@ -48,9 +49,9 @@ NEON_DIM = QColor(80,  35,  10)
 _PI = math.pi
 
 SNAP_POSITIONS = [
-    ("TL", "Top-left"),  ("T", "Top-center"),    ("TR", "Top-right"),
-    ("C",  "Center"),
-    ("BL", "Bottom-left"), ("B", "Bottom-center"), ("BR", "Bottom-right"),
+    ("TL", "Top-left"),    ("T", "Top-center"),    ("TR", "Top-right"),
+    ("L",  "Left"),        ("C", "Center"),         ("R",  "Right"),
+    ("BL", "Bottom-left"), ("B", "Bottom-center"),  ("BR", "Bottom-right"),
 ]
 
 MENU_STYLE = (
@@ -66,13 +67,17 @@ MENU_STYLE = (
 # w, h    – widget pixel dimensions
 # r       – arc radius
 POSITION_GEOMETRY: dict[str, dict] = {
-    "TL": dict(cx=0,    cy=0,    start=0.0,        end=_PI/2,   w=SIZE, h=SIZE, r=SIZE),
-    "TR": dict(cx=SIZE, cy=0,    start=_PI/2,      end=_PI,     w=SIZE, h=SIZE, r=SIZE),
-    "BL": dict(cx=0,    cy=SIZE, start=3*_PI/2,    end=2*_PI,   w=SIZE, h=SIZE, r=SIZE),
-    "BR": dict(cx=SIZE, cy=SIZE, start=_PI,        end=3*_PI/2, w=SIZE, h=SIZE, r=SIZE),
-    "T":  dict(cx=HALF, cy=0,    start=0.0,        end=_PI,     w=SIZE, h=HALF, r=HALF),
-    "B":  dict(cx=HALF, cy=HALF, start=_PI,        end=2*_PI,   w=SIZE, h=HALF, r=HALF),
-    "C":  dict(cx=HALF, cy=0,    start=0.0,        end=_PI,     w=SIZE, h=HALF, r=HALF),
+    # flip=True  → text sweeps CCW with rotation-90 so chars read upright from below
+    # flip=False → text sweeps CW  with rotation+90 so chars read upright from above
+    "TL": dict(cx=0,      cy=0,      start=0.0,      end=_PI/2,     w=SIZE,   h=SIZE,   r=SIZE,   flip=True),
+    "TR": dict(cx=SIZE,   cy=0,      start=_PI/2,    end=_PI,       w=SIZE,   h=SIZE,   r=SIZE,   flip=True),
+    "BL": dict(cx=0,      cy=SIZE,   start=3*_PI/2,  end=2*_PI,     w=SIZE,   h=SIZE,   r=SIZE,   flip=False),
+    "BR": dict(cx=SIZE,   cy=SIZE,   start=_PI,      end=3*_PI/2,   w=SIZE,   h=SIZE,   r=SIZE,   flip=False),
+    "T":  dict(cx=EDGE_R, cy=0,      start=0.0,      end=_PI,       w=EDGE_D, h=EDGE_R, r=EDGE_R, flip=True),
+    "B":  dict(cx=EDGE_R, cy=EDGE_R, start=_PI,      end=2*_PI,     w=EDGE_D, h=EDGE_R, r=EDGE_R, flip=False),
+    "L":  dict(cx=0,      cy=EDGE_R, start=-_PI/2,   end=_PI/2,     w=EDGE_R, h=EDGE_D, r=EDGE_R, flip=False),
+    "R":  dict(cx=EDGE_R, cy=EDGE_R, start=_PI/2,    end=3*_PI/2,   w=EDGE_R, h=EDGE_D, r=EDGE_R, flip=False),
+    "C":  dict(cx=EDGE_R, cy=0,      start=0.0,      end=_PI,       w=EDGE_D, h=EDGE_R, r=EDGE_R, flip=True),
 }
 
 _ONES = [
@@ -132,8 +137,13 @@ def _arc_sector(cx: float, cy: float, r1: float, r2: float,
 def _draw_arc_text(painter: QPainter, text: str,
                    cx: float, cy: float, text_r: float,
                    start: float, span: float,
-                   font_sz: int, color: QColor) -> None:
-    """Render text curved along an arc at radius text_r, centred in the span."""
+                   font_sz: int, color: QColor,
+                   flip: bool = False) -> None:
+    """Render text curved along an arc at radius text_r, centred in the span.
+
+    flip=False (BL/BR/B): chars sweep CW, tops face outward — readable from above.
+    flip=True  (TL/TR/T): chars sweep CCW, tops face inward — readable from below.
+    """
     font = QFont("Segoe UI", font_sz)
     fm   = QFontMetricsF(font)
     painter.setFont(font)
@@ -141,26 +151,43 @@ def _draw_arc_text(painter: QPainter, text: str,
     widths    = [fm.horizontalAdvance(ch) for ch in text]
     total_w   = sum(widths)
     text_span = total_w / text_r
-    angle     = start + (span - text_span) / 2
     baseline  = (fm.ascent() - fm.descent()) / 2
 
-    for ch, cw in zip(text, widths):
-        mid_a = angle + cw / (2 * text_r)
-        px = cx + text_r * math.cos(mid_a)
-        py = cy + text_r * math.sin(mid_a)
-
-        painter.save()
-        painter.translate(px, py)
-        painter.rotate(math.degrees(mid_a) + 90)
-
-        ch_path = QPainterPath()
-        ch_path.addText(-cw / 2, baseline, font, ch)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(color)
-        painter.drawPath(ch_path)
-
-        painter.restore()
-        angle += cw / text_r
+    if flip:
+        # Start from the far (end) side, advance toward start — CCW sweep.
+        # rotation = angle - 90° keeps char tops pointing upward (screen-north).
+        angle = start + (span + text_span) / 2
+        for ch, cw in zip(text, widths):
+            mid_a = angle - cw / (2 * text_r)
+            px = cx + text_r * math.cos(mid_a)
+            py = cy + text_r * math.sin(mid_a)
+            painter.save()
+            painter.translate(px, py)
+            painter.rotate(math.degrees(mid_a) - 90)
+            ch_path = QPainterPath()
+            ch_path.addText(-cw / 2, baseline, font, ch)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawPath(ch_path)
+            painter.restore()
+            angle -= cw / text_r
+    else:
+        # Normal CW sweep: rotation = angle + 90°, tops face outward.
+        angle = start + (span - text_span) / 2
+        for ch, cw in zip(text, widths):
+            mid_a = angle + cw / (2 * text_r)
+            px = cx + text_r * math.cos(mid_a)
+            py = cy + text_r * math.sin(mid_a)
+            painter.save()
+            painter.translate(px, py)
+            painter.rotate(math.degrees(mid_a) + 90)
+            ch_path = QPainterPath()
+            ch_path.addText(-cw / 2, baseline, font, ch)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawPath(ch_path)
+            painter.restore()
+            angle += cw / text_r
 
 
 class ArcWidget(QWidget):
@@ -206,18 +233,19 @@ class ArcWidget(QWidget):
         self.setMask(QRegion(QPolygon(pts)))
 
     def _target_topleft(self, pos_id: str) -> tuple[int, int]:
-        scr  = self.screen().availableGeometry()
-        g    = POSITION_GEOMETRY[pos_id]
-        scx  = scr.center().x() - g["w"] // 2
-        scy  = scr.center().y() - g["h"] // 2
+        scr = self.screen().availableGeometry()
+        cx  = scr.center().x()
+        cy  = scr.center().y()
         return {
-            "TL": (scr.left(),              scr.top()),
-            "TR": (scr.right() - SIZE + 1,  scr.top()),
-            "BL": (scr.left(),              scr.bottom() - SIZE + 1),
-            "BR": (scr.right() - SIZE + 1,  scr.bottom() - SIZE + 1),
-            "T":  (scx,                     scr.top()),
-            "B":  (scx,                     scr.bottom() - HALF + 1),
-            "C":  (scx,                     scy),
+            "TL": (scr.left(),                   scr.top()),
+            "TR": (scr.right()  - SIZE   + 1,    scr.top()),
+            "BL": (scr.left(),                   scr.bottom() - SIZE   + 1),
+            "BR": (scr.right()  - SIZE   + 1,    scr.bottom() - SIZE   + 1),
+            "T":  (cx - EDGE_R,                  scr.top()),
+            "B":  (cx - EDGE_R,                  scr.bottom() - EDGE_R + 1),
+            "L":  (scr.left(),                   cy - EDGE_R),
+            "R":  (scr.right()  - EDGE_R + 1,    cy - EDGE_R),
+            "C":  (cx - EDGE_R,                  cy - EDGE_R // 2),
         }[pos_id]
 
     # ── timer ─────────────────────────────────────────────────────────────
@@ -409,14 +437,15 @@ class ArcWidget(QWidget):
         p.drawLine(int(cx), int(cy),
                    int(cx + r * math.cos(end)),   int(cy + r * math.sin(end)))
 
-        # Curved word text
-        label   = _time_label(self._seconds)
-        alpha   = 0.68 if not self._dim else 0.30
+        # Word text (curved for arc positions; straight-rotated for L/R)
+        label = _time_label(self._seconds)
+        alpha = 0.68 if not self._dim else 0.30
         if self._light_mode:
             txt_c = QColor(45, 25, 8, int(220 * alpha))
         else:
             txt_c = QColor(255, 205, 155, int(215 * alpha))
-        _draw_arc_text(p, label, cx, cy, text_r, start, span, font_sz, txt_c)
+        _draw_arc_text(p, label, cx, cy, text_r, start, span, font_sz, txt_c,
+                       flip=g["flip"])
 
     # ── lifecycle ─────────────────────────────────────────────────────────
 
