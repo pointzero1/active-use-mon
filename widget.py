@@ -372,15 +372,6 @@ class ArcWidget(QWidget):
         hours_done = int(min(self._seconds // 3600, MAX_HOURS))
         min_frac   = ((self._seconds // 60) % 60) / 60.0
 
-        # Background
-        grad = QRadialGradient(cx, cy, r)
-        if self._light_mode:
-            grad.setColorAt(0.0, QColor(240, 220, 200, 110))
-            grad.setColorAt(1.0, QColor(200, 180, 160, 65))
-        else:
-            grad.setColorAt(0.0, QColor(28, 20, 18, 110))
-            grad.setColorAt(1.0, QColor(10,  7,  6,  60))
-        p.fillPath(_arc_sector(cx, cy, 0, r, start, end), grad)
 
         GAP = 2.0  # transparent gap between bands
         # Hour bands (inside-out: band 0 = innermost = first hour)
