@@ -49,3 +49,31 @@ def test_extract_session_skips_malformed_lines(tmp_path):
     s = extract_session(str(p))
     assert s["title"] == "hi"
     assert s["last_active"] == "2026-05-01T10:02:00Z"
+
+
+from collections import Counter
+
+from claude_index import infer_project
+
+
+def test_infer_project_from_cwd_in_dev():
+    name, path = infer_project(r"C:\dev\lalatine", Counter())
+    assert name == "lalatine"
+    assert path == r"C:\dev\lalatine"
+
+
+def test_infer_project_from_content_when_run_from_root():
+    name, path = infer_project(r"C:\Claude-AI", Counter({"daios-portal": 9, "lalatine": 2}))
+    assert name == "daios-portal"
+    assert path == r"C:\dev\daios-portal"
+
+
+def test_infer_project_catchall_workspace_root():
+    name, path = infer_project(r"C:\Claude-AI", Counter())
+    assert name == "workspace-root"
+    assert path == r"C:\Claude-AI"
+
+
+def test_infer_project_catchall_home():
+    name, _ = infer_project(r"C:\Users\bencu", Counter())
+    assert name == "home"
