@@ -40,7 +40,7 @@ SIZE     = 150          # corner widget side-length / corner arc radius
 EDGE_R   = 140          # half-circle radius for edge positions (T/B/L/R)
 EDGE_D   = EDGE_R * 2  # wide dimension of edge widgets
 
-TEXT_FRAC    = 0.22             # fraction of radius used by the outer text ring
+TEXT_FRAC    = 0.30             # fraction of radius used by the outer text ring
 BAND_R_FRAC  = 1.0 - TEXT_FRAC # bands live from 0 → this fraction of radius
 
 NEON     = QColor(255, 110, 40)
@@ -358,7 +358,7 @@ class ArcWidget(QWidget):
         band_max_r = r * BAND_R_FRAC
         band_w     = band_max_r / MAX_HOURS
         text_r     = r * (1.0 - TEXT_FRAC * 0.5)
-        font_sz    = max(7, int(r * TEXT_FRAC * 0.40))
+        font_sz    = max(10, int(r * TEXT_FRAC * 0.52))
 
         # Fit label in arc: shrink font, then fall back to short format
         label = _time_label(self._seconds)
@@ -440,22 +440,15 @@ class ArcWidget(QWidget):
         p.drawLine(int(cx), int(cy),
                    int(cx + r * math.cos(end)),   int(cy + r * math.sin(end)))
 
-        # Subtle background only in the text ring (band_max_r → r)
-        if self._light_mode:
-            ring_bg = QColor(240, 225, 210, 160 if not self._dim else 90)
-        else:
-            ring_bg = QColor(12, 8, 6, 180 if not self._dim else 100)
+        # Transparent gray background only in the text ring (band_max_r → r)
+        ring_bg = QColor(90, 90, 90, 160 if not self._dim else 90)
         p.setBrush(ring_bg)
         p.setPen(Qt.PenStyle.NoPen)
         p.drawPath(_arc_sector(cx, cy, band_max_r, r, start, end))
 
         # Word text curved along the outer arc ring
-        if self._light_mode:
-            txt_c     = QColor(15, 5, 0,   235 if not self._dim else 140)
-            outline_c = None
-        else:
-            txt_c     = QColor(255, 240, 210, 240 if not self._dim else 155)
-            outline_c = None
+        txt_c     = QColor(255, 255, 255, 240 if not self._dim else 160)
+        outline_c = None
         _draw_arc_text(p, label, cx, cy, text_r, start, span, font_sz, txt_c,
                        flip=g["flip"], outline=outline_c)
 
