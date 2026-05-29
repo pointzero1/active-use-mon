@@ -148,11 +148,13 @@ def _draw_arc_text(painter: QPainter, text: str,
                    cx: float, cy: float, text_r: float,
                    start: float, span: float,
                    font_sz: int, color: QColor,
-                   flip: bool = False) -> None:
+                   flip: bool = False,
+                   outline: QColor | None = None) -> None:
     """Render text curved along an arc at radius text_r, centred in the span.
 
     flip=False (BL/BR/B): chars sweep CW, tops face outward — readable from above.
     flip=True  (TL/TR/T): chars sweep CCW, tops face inward — readable from below.
+    outline: if given, draw a contrasting stroke behind each char for legibility.
     """
     font = QFont("Segoe UI", font_sz)
     fm   = QFontMetricsF(font)
@@ -163,39 +165,39 @@ def _draw_arc_text(painter: QPainter, text: str,
     text_span = total_w / text_r
     baseline  = (fm.ascent() - fm.descent()) / 2
 
+    def _draw_char(ch_path: QPainterPath) -> None:
+        if outline is not None:
+            painter.setPen(QPen(outline, max(1.5, font_sz * 0.18)))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(ch_path)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawPath(ch_path)
+
     if flip:
-        # Start from the far (end) side, advance toward start — CCW sweep.
-        # rotation = angle - 90° keeps char tops pointing upward (screen-north).
         angle = start + (span + text_span) / 2
         for ch, cw in zip(text, widths):
             mid_a = angle - cw / (2 * text_r)
-            px = cx + text_r * math.cos(mid_a)
-            py = cy + text_r * math.sin(mid_a)
             painter.save()
-            painter.translate(px, py)
+            painter.translate(cx + text_r * math.cos(mid_a),
+                              cy + text_r * math.sin(mid_a))
             painter.rotate(math.degrees(mid_a) - 90)
             ch_path = QPainterPath()
             ch_path.addText(-cw / 2, baseline, font, ch)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(color)
-            painter.drawPath(ch_path)
+            _draw_char(ch_path)
             painter.restore()
             angle -= cw / text_r
     else:
-        # Normal CW sweep: rotation = angle + 90°, tops face outward.
         angle = start + (span - text_span) / 2
         for ch, cw in zip(text, widths):
             mid_a = angle + cw / (2 * text_r)
-            px = cx + text_r * math.cos(mid_a)
-            py = cy + text_r * math.sin(mid_a)
             painter.save()
-            painter.translate(px, py)
+            painter.translate(cx + text_r * math.cos(mid_a),
+                              cy + text_r * math.sin(mid_a))
             painter.rotate(math.degrees(mid_a) + 90)
             ch_path = QPainterPath()
             ch_path.addText(-cw / 2, baseline, font, ch)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(color)
-            painter.drawPath(ch_path)
+            _draw_char(ch_path)
             painter.restore()
             angle += cw / text_r
 
@@ -415,13 +417,7 @@ class ArcWidget(QWidget):
                 p.setPen(Qt.PenStyle.NoPen)
 
             else:
-                # Future band — visible outline
-                faint = QColor(NEON)
-                faint.setAlpha(40 if not self._dim else 15)
-                p.setPen(QPen(faint, 1.0))
-                p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawPath(_arc_sector(cx, cy, r1, r2, start, end))
-                p.setPen(Qt.PenStyle.NoPen)
+                pass  # future bands invisible — nothing drawn
 
         # Text ring separator arc
         sep_c = QColor(NEON)
@@ -444,13 +440,15 @@ class ArcWidget(QWidget):
         p.drawLine(int(cx), int(cy),
                    int(cx + r * math.cos(end)),   int(cy + r * math.sin(end)))
 
-        # Word text curved along the outer arc ring
+        # Word text curved along the outer arc ring, with contrasting outline
         if self._light_mode:
-            txt_c = QColor(20, 8, 0, 230 if not self._dim else 130)
+            txt_c     = QColor(15, 5, 0,   230 if not self._dim else 130)
+            outline_c = QColor(255, 255, 255, 180 if not self._dim else 100)
         else:
-            txt_c = QColor(255, 235, 200, 240 if not self._dim else 140)
+            txt_c     = QColor(255, 240, 210, 240 if not self._dim else 150)
+            outline_c = QColor(0, 0, 0,       200 if not self._dim else 120)
         _draw_arc_text(p, label, cx, cy, text_r, start, span, font_sz, txt_c,
-                       flip=g["flip"])
+                       flip=g["flip"], outline=outline_c)
 
     # ── lifecycle ─────────────────────────────────────────────────────────
 
