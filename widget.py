@@ -440,13 +440,22 @@ class ArcWidget(QWidget):
         p.drawLine(int(cx), int(cy),
                    int(cx + r * math.cos(end)),   int(cy + r * math.sin(end)))
 
-        # Word text curved along the outer arc ring, with contrasting outline
+        # Subtle background only in the text ring (band_max_r → r)
         if self._light_mode:
-            txt_c     = QColor(15, 5, 0,   230 if not self._dim else 130)
-            outline_c = QColor(255, 255, 255, 180 if not self._dim else 100)
+            ring_bg = QColor(240, 225, 210, 160 if not self._dim else 90)
         else:
-            txt_c     = QColor(255, 240, 210, 240 if not self._dim else 150)
-            outline_c = QColor(0, 0, 0,       200 if not self._dim else 120)
+            ring_bg = QColor(12, 8, 6, 180 if not self._dim else 100)
+        p.setBrush(ring_bg)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawPath(_arc_sector(cx, cy, band_max_r, r, start, end))
+
+        # Word text curved along the outer arc ring
+        if self._light_mode:
+            txt_c     = QColor(15, 5, 0,   235 if not self._dim else 140)
+            outline_c = None
+        else:
+            txt_c     = QColor(255, 240, 210, 240 if not self._dim else 155)
+            outline_c = None
         _draw_arc_text(p, label, cx, cy, text_r, start, span, font_sz, txt_c,
                        flip=g["flip"], outline=outline_c)
 
