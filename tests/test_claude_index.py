@@ -136,3 +136,51 @@ def test_build_index_reuses_cache_for_unchanged_files(tmp_path, monkeypatch):
     monkeypatch.setattr(claude_index, "extract_session", spy)
     build_index(str(root), str(cache))  # nothing changed
     assert calls["n"] == 0  # cache hit, no re-parse
+
+
+from datetime import datetime, timezone
+
+from claude_index import filter_index, format_relative, load_index, refresh
+
+
+def test_refresh_writes_and_load_reads(tmp_path):
+    root = tmp_path / "projects"
+    d = root / "C--dev-lalatine"
+    d.mkdir(parents=True)
+    _write_jsonl(d / "s1.jsonl", [
+        {"type": "user", "cwd": r"C:\dev\lalatine", "timestamp": "2026-05-03T08:00:00Z",
+         "message": {"content": "ship it"}}])
+    index_path = tmp_path / "index.json"
+    cache_path = tmp_path / "cache.json"
+
+    index = refresh(str(root), str(index_path), str(cache_path))
+    assert index_path.exists()
+    loaded = load_index(str(index_path))
+    assert loaded["projects"][0]["name"] == "lalatine"
+
+
+def test_load_index_missing_returns_empty(tmp_path):
+    loaded = load_index(str(tmp_path / "nope.json"))
+    assert loaded == {"generated_at": None, "projects": []}
+
+
+def test_format_relative():
+    now = datetime(2026, 5, 3, 12, 0, 0, tzinfo=timezone.utc)
+    assert format_relative("2026-05-03T12:00:00Z", now) == "just now"
+    assert format_relative("2026-05-03T10:00:00Z", now) == "2h ago"
+    assert format_relative("2026-05-01T12:00:00Z", now) == "2d ago"
+    assert format_relative(None, now) == "—"
+
+
+def test_filter_index_matches_project_and_session():
+    index = {"projects": [
+        {"name": "daios-portal", "skills": ["stamp"], "sessions": [
+            {"title": "fix vehicle links"}]},
+        {"name": "lalatine", "skills": ["docx"], "sessions": [
+            {"title": "email setup"}]},
+    ]}
+    out = filter_index(index, "vehicle")
+    assert len(out["projects"]) == 1 and out["projects"][0]["name"] == "daios-portal"
+    out2 = filter_index(index, "lala")
+    assert len(out2["projects"]) == 1 and out2["projects"][0]["name"] == "lalatine"
+    assert filter_index(index, "")["projects"] == index["projects"]
