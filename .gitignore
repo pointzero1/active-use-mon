@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.bak
+widget.out.log
+widget.err.log
+claude_index.json
+claude_index.cache.json
+active_time.json
+.pytest_cache/
