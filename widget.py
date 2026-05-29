@@ -382,11 +382,12 @@ class ArcWidget(QWidget):
             grad.setColorAt(1.0, QColor(10,  7,  6,  60))
         p.fillPath(_arc_sector(cx, cy, 0, r, start, end), grad)
 
+        GAP = 2.0  # transparent gap between bands
         # Hour bands (inside-out: band 0 = innermost = first hour)
         p.setPen(Qt.PenStyle.NoPen)
         for i in range(MAX_HOURS):
             r1 = i * band_w
-            r2 = (i + 1) * band_w
+            r2 = (i + 1) * band_w - GAP  # leave gap at outer edge
 
             if i < hours_done:
                 # Graduated brightness: inner bands darker, outer bands brighter
@@ -395,16 +396,6 @@ class ArcWidget(QWidget):
                 c.setAlpha(band_alpha)
                 p.setBrush(c)
                 p.drawPath(_arc_sector(cx, cy, r1, r2, start, end))
-                # Thick dark separator at outer edge
-                sep = QPainterPath()
-                sep.moveTo(cx + r2 * math.cos(start), cy + r2 * math.sin(start))
-                for j in range(1, 33):
-                    a = start + span * j / 32
-                    sep.lineTo(cx + r2 * math.cos(a), cy + r2 * math.sin(a))
-                p.setPen(QPen(QColor(0, 0, 0, 140 if not self._dim else 70), 2.5))
-                p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawPath(sep)
-                p.setPen(Qt.PenStyle.NoPen)
 
             elif i == hours_done:
                 # Ghost background for current band
@@ -427,7 +418,7 @@ class ArcWidget(QWidget):
                 for j in range(1, 65):
                     a = start + span * j / 64
                     arc_line.lineTo(cx + r2 * math.cos(a), cy + r2 * math.sin(a))
-                p.setPen(QPen(outline_c, 1.5))
+                p.setPen(QPen(outline_c, 1.0))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawPath(arc_line)
                 p.setPen(Qt.PenStyle.NoPen)
