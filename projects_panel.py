@@ -32,10 +32,8 @@ QScrollArea { border: none; }
 
 
 class ProjectsPanel(QWidget):
-    def __init__(self, index_loader: Callable[[], dict] | None = None,
-                 refresher: Callable[[], dict] | None = None) -> None:
+    def __init__(self, refresher: Callable[[], dict] | None = None) -> None:
         super().__init__()
-        self._load = index_loader or ci.load_index
         self._refresh = refresher or ci.refresh
         self._index: dict = {"projects": []}
 
