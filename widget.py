@@ -106,6 +106,16 @@ def _time_label(total_seconds: int) -> str:
     return f"{hw}  {mw}"
 
 
+def _time_label_short(total_seconds: int) -> str:
+    h = total_seconds // 3600
+    m = (total_seconds % 3600) // 60
+    if h == 0:
+        return f"{m}m"
+    if m == 0:
+        return f"{h}h"
+    return f"{h}h {m}m"
+
+
 def _arc_sector(cx: float, cy: float, r1: float, r2: float,
                 a0: float, a1: float, n: int = 64) -> QPainterPath:
     """Annular sector (pie slice when r1 == 0).  Screen-convention angles."""
@@ -348,14 +358,16 @@ class ArcWidget(QWidget):
         text_r     = r * (1.0 - TEXT_FRAC * 0.5)
         font_sz    = max(7, int(r * TEXT_FRAC * 0.40))
 
-        # Shrink font until the label fits within the available arc length
+        # Fit label in arc: shrink font, then fall back to short format
         label = _time_label(self._seconds)
-        while font_sz > 7:
+        while font_sz > 9:
             _fm = QFontMetricsF(QFont("Segoe UI", font_sz))
-            total_w = sum(_fm.horizontalAdvance(ch) for ch in label)
-            if total_w / text_r <= span * 0.92:
+            if sum(_fm.horizontalAdvance(ch) for ch in label) / text_r <= span * 0.90:
                 break
             font_sz -= 1
+        _fm = QFontMetricsF(QFont("Segoe UI", font_sz))
+        if sum(_fm.horizontalAdvance(ch) for ch in label) / text_r > span * 0.90:
+            label = _time_label_short(self._seconds)
 
         hours_done = int(min(self._seconds // 3600, MAX_HOURS))
         min_frac   = ((self._seconds // 60) % 60) / 60.0
@@ -377,50 +389,54 @@ class ArcWidget(QWidget):
             r2 = (i + 1) * band_w
 
             if i < hours_done:
-                p.setBrush(self._neon(215))
+                # Graduated brightness: inner bands darker, outer bands brighter
+                band_alpha = int((155 + i * 14) * (0.5 if self._dim else 1.0))
+                c = QColor(NEON_DIM if self._dim else NEON)
+                c.setAlpha(band_alpha)
+                p.setBrush(c)
                 p.drawPath(_arc_sector(cx, cy, r1, r2, start, end))
-                # separator line at outer edge of completed band
+                # Thick dark separator at outer edge
                 sep = QPainterPath()
                 sep.moveTo(cx + r2 * math.cos(start), cy + r2 * math.sin(start))
                 for j in range(1, 33):
                     a = start + span * j / 32
                     sep.lineTo(cx + r2 * math.cos(a), cy + r2 * math.sin(a))
-                p.setPen(QPen(QColor(0, 0, 0, 45 if not self._dim else 22), 1.0))
+                p.setPen(QPen(QColor(0, 0, 0, 140 if not self._dim else 70), 2.5))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawPath(sep)
                 p.setPen(Qt.PenStyle.NoPen)
 
             elif i == hours_done:
-                # Dim background of the current band
+                # Ghost background for current band
                 ghost = QColor(NEON)
-                ghost.setAlpha(15 if not self._dim else 7)
+                ghost.setAlpha(30 if not self._dim else 12)
                 p.setBrush(ghost)
                 p.drawPath(_arc_sector(cx, cy, r1, r2, start, end))
 
                 # Minute sweep
                 if min_frac > 0:
                     sweep_end = start + span * min_frac
-                    p.setBrush(self._neon(165))
+                    p.setBrush(self._neon(190))
                     p.drawPath(_arc_sector(cx, cy, r1, r2, start, sweep_end))
 
                 # Outline of current band outer edge
                 outline_c = QColor(NEON)
-                outline_c.setAlpha(55 if not self._dim else 22)
+                outline_c.setAlpha(90 if not self._dim else 35)
                 arc_line = QPainterPath()
                 arc_line.moveTo(cx + r2 * math.cos(start), cy + r2 * math.sin(start))
                 for j in range(1, 65):
                     a = start + span * j / 64
                     arc_line.lineTo(cx + r2 * math.cos(a), cy + r2 * math.sin(a))
-                p.setPen(QPen(outline_c, 1.0))
+                p.setPen(QPen(outline_c, 1.5))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawPath(arc_line)
                 p.setPen(Qt.PenStyle.NoPen)
 
             else:
-                # Future band — faint outline only
+                # Future band — visible outline
                 faint = QColor(NEON)
-                faint.setAlpha(18 if not self._dim else 7)
-                p.setPen(QPen(faint, 0.8))
+                faint.setAlpha(40 if not self._dim else 15)
+                p.setPen(QPen(faint, 1.0))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawPath(_arc_sector(cx, cy, r1, r2, start, end))
                 p.setPen(Qt.PenStyle.NoPen)
@@ -447,11 +463,10 @@ class ArcWidget(QWidget):
                    int(cx + r * math.cos(end)),   int(cy + r * math.sin(end)))
 
         # Word text curved along the outer arc ring
-        alpha = 0.68 if not self._dim else 0.30
         if self._light_mode:
-            txt_c = QColor(45, 25, 8, int(220 * alpha))
+            txt_c = QColor(20, 8, 0, 230 if not self._dim else 130)
         else:
-            txt_c = QColor(255, 205, 155, int(215 * alpha))
+            txt_c = QColor(255, 235, 200, 240 if not self._dim else 140)
         _draw_arc_text(p, label, cx, cy, text_r, start, span, font_sz, txt_c,
                        flip=g["flip"])
 
