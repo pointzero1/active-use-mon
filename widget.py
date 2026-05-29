@@ -1,4 +1,4 @@
-"""sysmon-widget — arc active-time widget.
+"""active-use-mon — arc active-time widget.
 
 Quarter-circle in screen corners, half-circle on screen edges.
 Snaps to seven positions; click-through outside the arc shape.
@@ -488,7 +488,7 @@ def main() -> int:
     widget.on_double_click = panel.toggle
 
     tray = QSystemTrayIcon(_make_tray_icon())
-    tray.setToolTip("sysmon-widget — active time")
+    tray.setToolTip("active-use-mon — active time")
 
     menu = QMenu()
     menu.setStyleSheet(MENU_STYLE)

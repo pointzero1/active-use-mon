@@ -1,4 +1,4 @@
-# sysmon-widget
+# active-use-mon
 
 Always-on-top desktop widget for Windows that displays:
 
