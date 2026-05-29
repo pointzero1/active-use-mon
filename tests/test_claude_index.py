@@ -77,3 +77,62 @@ def test_infer_project_catchall_workspace_root():
 def test_infer_project_catchall_home():
     name, _ = infer_project(r"C:\Users\bencu", Counter())
     assert name == "home"
+
+
+from claude_index import build_index
+
+
+def test_build_index_rolls_up_and_merges_subagents(tmp_path):
+    root = tmp_path / "projects"
+    sess_dir = root / "C--Claude-AI"
+    sub_dir = sess_dir / "uuid-1" / "subagents"
+    sub_dir.mkdir(parents=True)
+
+    _write_jsonl(sess_dir / "uuid-1.jsonl", [
+        {"type": "user", "cwd": r"C:\Claude-AI", "timestamp": "2026-05-02T09:00:00Z",
+         "message": {"content": "work on daios-portal"}},
+        {"type": "assistant", "timestamp": "2026-05-02T09:00:01Z",
+         "message": {"content": [
+             {"type": "tool_use", "name": "Read",
+              "input": {"file_path": r"C:\dev\daios-portal\a.html"}}]}},
+    ])
+    _write_jsonl(sub_dir / "agent-x.jsonl", [
+        {"type": "assistant", "timestamp": "2026-05-02T09:00:02Z",
+         "message": {"content": [
+             {"type": "tool_use", "name": "Skill", "input": {"skill": "stamp"}}]}},
+    ])
+
+    cache = tmp_path / "cache.json"
+    index = build_index(str(root), str(cache))
+
+    assert len(index["projects"]) == 1
+    proj = index["projects"][0]
+    assert proj["name"] == "daios-portal"
+    assert proj["session_count"] == 1
+    assert "stamp" in proj["skills"]  # merged from subagent
+    assert proj["last_active"] == "2026-05-02T09:00:01Z"
+    assert os.path.exists(cache)
+
+
+def test_build_index_reuses_cache_for_unchanged_files(tmp_path, monkeypatch):
+    root = tmp_path / "projects"
+    d = root / "C--dev-lalatine"
+    d.mkdir(parents=True)
+    f = d / "s1.jsonl"
+    _write_jsonl(f, [
+        {"type": "user", "cwd": r"C:\dev\lalatine", "timestamp": "2026-05-03T08:00:00Z",
+         "message": {"content": "x"}}])
+    cache = tmp_path / "cache.json"
+    build_index(str(root), str(cache))
+
+    calls = {"n": 0}
+    import claude_index
+    real = claude_index.extract_session
+
+    def spy(path):
+        calls["n"] += 1
+        return real(path)
+
+    monkeypatch.setattr(claude_index, "extract_session", spy)
+    build_index(str(root), str(cache))  # nothing changed
+    assert calls["n"] == 0  # cache hit, no re-parse
