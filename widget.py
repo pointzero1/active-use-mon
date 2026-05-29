@@ -40,7 +40,7 @@ SIZE     = 150          # corner widget side-length / corner arc radius
 EDGE_R   = 140          # half-circle radius for edge positions (T/B/L/R)
 EDGE_D   = EDGE_R * 2  # wide dimension of edge widgets
 
-TEXT_FRAC    = 0.30             # fraction of radius used by the outer text ring
+TEXT_FRAC    = 0.22             # fraction of radius used by the outer text ring
 BAND_R_FRAC  = 1.0 - TEXT_FRAC # bands live from 0 → this fraction of radius
 
 NEON     = QColor(255, 110, 40)
