@@ -32,6 +32,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from activity_tracker import ActivityTracker
+from clock_panel import ClockPanel
 from projects_panel import ProjectsPanel
 
 POLL_MS  = 1_000
@@ -218,6 +219,7 @@ class ArcWidget(QWidget):
         self._light_mode    = False
         self._drag_pos: QPoint | None = None
         self.on_double_click = None  # set by main(): callback to toggle panel
+        self.on_show_clock = None    # set by main(): callback to toggle clock panel
 
         self._tracker = ActivityTracker()
         self._apply_geometry()
@@ -299,7 +301,11 @@ class ArcWidget(QWidget):
             projects_act = QAction("Show / hide projects", menu)
             projects_act.triggered.connect(self.on_double_click)
             menu.addAction(projects_act)
-            menu.addSeparator()
+        if self.on_show_clock:
+            clock_act = QAction("Show / hide clock & weather", menu)
+            clock_act.triggered.connect(self.on_show_clock)
+            menu.addAction(clock_act)
+        menu.addSeparator()
         for pos_id, label in SNAP_POSITIONS:
             act = QAction(f"Snap → {label}", menu)
             act.triggered.connect(lambda _=False, c=pos_id: self.snap_to(c))
@@ -492,6 +498,9 @@ def main() -> int:
     panel = ProjectsPanel()
     widget.on_double_click = panel.toggle
 
+    clock_panel = ClockPanel()
+    widget.on_show_clock = clock_panel.toggle
+
     tray = QSystemTrayIcon(_make_tray_icon())
     tray.setToolTip("active-use-mon — active time")
 
@@ -501,6 +510,10 @@ def main() -> int:
     projects_action = QAction("Show / hide projects", menu)
     projects_action.triggered.connect(panel.toggle)
     menu.addAction(projects_action)
+
+    clock_action = QAction("Show / hide clock & weather", menu)
+    clock_action.triggered.connect(clock_panel.toggle)
+    menu.addAction(clock_action)
     menu.addSeparator()
 
     for pos_id, label in SNAP_POSITIONS:
@@ -520,6 +533,7 @@ def main() -> int:
     quit_act = QAction("Quit", menu)
     def _quit() -> None:
         panel.close()
+        clock_panel.close()
         widget.stop()
         app.quit()
     quit_act.triggered.connect(_quit)

@@ -7,3 +7,5 @@ claude_index.json
 claude_index.cache.json
 active_time.json
 .pytest_cache/
+weather_cache.json
+location_override.json
