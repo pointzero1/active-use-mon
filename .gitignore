@@ -9,3 +9,5 @@ active_time.json
 .pytest_cache/
 weather_cache.json
 location_override.json
+calendar_widget_pos.json
+calendar_widget.err.log

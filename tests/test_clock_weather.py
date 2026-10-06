@@ -79,3 +79,8 @@ def test_location_override(monkeypatch, tmp_path):
     monkeypatch.setattr(cw, "OVERRIDE_PATH", p)
     loc = cw.resolve_location()
     assert loc["name"] == "Philly" and loc["lat"] == 40.0
+
+
+def test_format_date_short():
+    assert cw.format_date_short(datetime(2026, 10, 6, 12, 0)) == "10.06.26"
+    assert cw.format_date_short(datetime(2027, 1, 5)) == "01.05.27"

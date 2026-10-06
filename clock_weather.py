@@ -26,6 +26,9 @@ US_ZONES = [
     ("Hawaii",   "Pacific/Honolulu"),
 ]
 
+# The four continental zones, in the order the calendar widget shows them.
+MAIN_ZONES = [z for z in US_ZONES if z[0] in ("Eastern", "Central", "Mountain", "Pacific")]
+
 # WMO weather interpretation codes (Open-Meteo `weather_code`).
 _WMO = {
     0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast",
@@ -45,10 +48,11 @@ def _fmt_time(dt: datetime) -> str:
     return f"{dt.hour % 12 or 12}:{dt.minute:02d} {'AM' if dt.hour < 12 else 'PM'}"
 
 
-def us_zone_times(now_utc: datetime) -> list[dict]:
-    """Current time in each US zone. ``now_utc`` must be timezone-aware."""
+def us_zone_times(now_utc: datetime, zones: list | None = None) -> list[dict]:
+    """Current time in each zone (default: all US zones). ``now_utc`` must be
+    timezone-aware; ``zones`` is a list of (label, IANA key) pairs."""
     rows = []
-    for label, key in US_ZONES:
+    for label, key in (zones or US_ZONES):
         local = now_utc.astimezone(ZoneInfo(key))
         rows.append({"label": label, "tz": key,
                      "abbr": local.tzname(), "time": _fmt_time(local)})
@@ -57,6 +61,11 @@ def us_zone_times(now_utc: datetime) -> list[dict]:
 
 def format_date(dt: datetime) -> str:
     return f"{dt.strftime('%A, %B')} {dt.day}, {dt.year}"
+
+
+def format_date_short(dt: datetime) -> str:
+    """MM.DD.YY, e.g. 10.06.26 (used when the calendar widget is collapsed)."""
+    return dt.strftime("%m.%d.%y")
 
 
 def parse_location(data: dict) -> dict | None:

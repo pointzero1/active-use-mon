@@ -48,7 +48,7 @@ as the arc widget. It shows what you've worked on across Claude Code/Cowork.
 - Open the panel three ways: double-click the arc, the arc's right-click menu, or the
   tray menu → "Show / hide projects".
 - The panel only does work when opened (incremental refresh on open); hidden = idle.
-- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -v` (39 tests).
+- Tests: `QT_QPA_PLATFORM=offscreen python -m pytest -v` (60 tests).
 
 ## Clock & Weather panel
 
@@ -62,5 +62,21 @@ the arc's right-click menu or the tray menu → "Show / hide clock & weather".
 - Weather: Open-Meteo (no API key), fetched on a worker thread on open and every 15 min.
   Offline → last cached result (`weather_cache.json`) marked "stale"; clocks keep running.
 - Clocks tick only while the panel is visible.
+
+## Calendar widget (separate program)
+
+`calendar_widget.py` — its own always-on-top card, independent of the arc. Run:
+`pythonw calendar_widget.py`. Reuses `clock_weather.py` (zones, weather) and imports
+`widget.py`'s Win32 work-area helpers, so it still needs the arc's deps installed.
+
+- Expanded, top → bottom: date + EDT/CDT/MDT/PDT times, month calendar, weather.
+- **Click** collapses to just the local time and date (`MM.DD.YY`, same size as the
+  time); click again expands. A click waits out the double-click interval.
+- **Double-click** toggles fully transparent (default) ↔ opaque background. Transparent
+  paints alpha 2, not 0, because Windows passes clicks through zero-alpha pixels.
+- **Drag** to move; releasing within 60px of an edge/corner nests it there (and it stays
+  nested across expand/collapse). Right-click → Snap → corner/side, opacity, quit.
+- State (position, nested edges, expanded, opaque) persists in the gitignored
+  `calendar_widget_pos.json`.
 
 Deferred (not built): LLM prose session summaries; direct claude.ai chat capture.
