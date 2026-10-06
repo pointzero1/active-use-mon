@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import sys
 
-from PyQt6.QtCore import QPoint, Qt, QTimer
+from PyQt6.QtCore import QPoint, QRect, Qt, QTimer
 from PyQt6.QtGui import (
     QAction,
     QColor,
@@ -203,6 +203,96 @@ def _draw_arc_text(painter: QPainter, text: str,
             angle += cw / text_r
 
 
+def logical_work_area(full: QRect, mon_phys: tuple, work_phys: tuple,
+                      dpr: float) -> QRect:
+    """Correct *logical* work-area rect for a screen.
+
+    Qt's ``QScreen.availableGeometry()`` mis-scales the taskbar inset origin on
+    HiDPI displays — it uses the *physical* inset as the *logical* offset, so the
+    work area drifts by ``inset_px * (1 - 1/dpr)`` and can even extend past the
+    screen. Instead we take Qt's reliable logical full-screen rect and apply the
+    Win32 monitor insets (physical px), converted to logical via ``dpr``. The
+    Win32 work rect also reflects the taskbar's current (locked/unlocked)
+    thickness, so this adapts to either setting.
+
+    ``mon_phys`` / ``work_phys`` are Win32 RECT tuples ``(left, top, right,
+    bottom)`` with exclusive right/bottom, in physical pixels.
+    """
+    ml, mt, mr, mb = mon_phys
+    wl, wt, wr, wb = work_phys
+    dpr = dpr or 1.0
+    left   = round((wl - ml) / dpr)
+    top    = round((wt - mt) / dpr)
+    right  = round((mr - wr) / dpr)
+    bottom = round((mb - wb) / dpr)
+    return QRect(full.left() + left,
+                 full.top()  + top,
+                 full.width()  - left - right,
+                 full.height() - top  - bottom)
+
+
+def _win32_monitor_rects(hwnd: int):
+    """(rcMonitor, rcWork) physical-px RECT tuples for the monitor under ``hwnd``.
+
+    Returns ``None`` off-Windows or if the query fails, so callers fall back to
+    Qt's own (possibly mis-scaled) value.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD),
+                        ("rcMonitor", wintypes.RECT),
+                        ("rcWork", wintypes.RECT),
+                        ("dwFlags", wintypes.DWORD)]
+
+        # Set restypes/argtypes so 64-bit HMONITOR handles aren't truncated.
+        user32.MonitorFromWindow.restype = wintypes.HANDLE
+        user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+        user32.GetMonitorInfoW.restype = wintypes.BOOL
+        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE,
+                                           ctypes.POINTER(MONITORINFO)]
+
+        MONITOR_DEFAULTTOPRIMARY = 1
+        MONITOR_DEFAULTTONEAREST = 2
+        flag = MONITOR_DEFAULTTONEAREST if hwnd else MONITOR_DEFAULTTOPRIMARY
+        hmon = user32.MonitorFromWindow(hwnd, flag)
+        mi = MONITORINFO()
+        mi.cbSize = ctypes.sizeof(MONITORINFO)
+        if not user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+            return None
+        m, w = mi.rcMonitor, mi.rcWork
+        return ((m.left, m.top, m.right, m.bottom),
+                (w.left, w.top, w.right, w.bottom))
+    except Exception:
+        return None
+
+
+def _point_in_text_ring(cx: float, cy: float, r: float,
+                        x: float, y: float) -> bool:
+    """True when (x, y) lies in the outer text ring of an arc centred at
+    (cx, cy) with radius r — i.e. at radius >= BAND_R_FRAC * r. The window mask
+    already clips clicks to the arc, so only the inner bound is checked."""
+    return math.hypot(x - cx, y - cy) >= BAND_R_FRAC * r
+
+
+def _lock_workstation() -> bool:
+    """Lock the Windows session. Returns True on success; no-op (False) off
+    Windows or on failure. Never raises — must be safe to call from an event."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        return bool(ctypes.windll.user32.LockWorkStation())
+    except Exception:
+        return False
+
+
 class ArcWidget(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -223,12 +313,26 @@ class ArcWidget(QWidget):
 
         self._tracker = ActivityTracker()
         self._apply_geometry()
+        self._connect_screen_signals()
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(POLL_MS)
 
     # ── geometry ──────────────────────────────────────────────────────────
+
+    def _connect_screen_signals(self) -> None:
+        """Re-nest whenever the work area changes — taskbar lock/unlock, taskbar
+        resize, or DPI change all move the edge the widget anchors to."""
+        app = QApplication.instance()
+        if app is None:
+            return
+        for scr in app.screens():
+            scr.availableGeometryChanged.connect(self._reflow)
+            scr.geometryChanged.connect(self._reflow)
+
+    def _reflow(self, *_args) -> None:
+        self.snap_to(self.position)
 
     def _apply_geometry(self) -> None:
         g = POSITION_GEOMETRY[self.position]
@@ -246,8 +350,26 @@ class ArcWidget(QWidget):
             pts.append(QPoint(int(cx + r * math.cos(a)), int(cy + r * math.sin(a))))
         self.setMask(QRegion(QPolygon(pts)))
 
+    def _work_area(self) -> QRect:
+        """Logical work area for the widget's current screen.
+
+        Prefers the Win32 monitor work rect (correct on HiDPI, and reflects the
+        taskbar's locked/unlocked thickness); falls back to Qt off-Windows.
+        """
+        screen = self.screen()
+        try:
+            hwnd = int(self.winId())
+        except Exception:
+            hwnd = 0
+        rects = _win32_monitor_rects(hwnd)
+        if rects is None:
+            return screen.availableGeometry()
+        mon_phys, work_phys = rects
+        return logical_work_area(screen.geometry(), mon_phys, work_phys,
+                                 screen.devicePixelRatio())
+
     def _target_topleft(self, pos_id: str) -> tuple[int, int]:
-        scr = self.screen().availableGeometry()
+        scr = self._work_area()
         cx  = scr.center().x()
         cy  = scr.center().y()
         return {
@@ -289,10 +411,18 @@ class ArcWidget(QWidget):
         self._drag_pos = None
         self._snap_to_nearest()
 
+    def _in_text_ring(self, pos: QPoint) -> bool:
+        g = POSITION_GEOMETRY[self.position]
+        return _point_in_text_ring(g["cx"], g["cy"], g["r"], pos.x(), pos.y())
+
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
-        if event.button() == Qt.MouseButton.LeftButton and self.on_double_click:
-            self.on_double_click()
-            event.accept()
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if self._in_text_ring(event.position().toPoint()):
+            _lock_workstation()         # outer words band → lock Windows
+        elif self.on_double_click:
+            self.on_double_click()      # inner bands → toggle projects panel
+        event.accept()
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         menu = QMenu(self)
