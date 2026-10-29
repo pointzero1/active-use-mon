@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>sysmon-widget — proposed design</title>
+<style>
+  body { margin: 0; background: #111; font-family: 'Segoe UI', sans-serif; color: #ccc; }
+  h2 { text-align: center; color: #ff8a40; margin: 24px 0 4px; font-size: 18px; }
+  .subtitle { text-align: center; color: #777; font-size: 13px; margin: 0 0 24px; }
+  .panels { display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; padding: 0 24px 32px; }
+  .panel { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .panel-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+  canvas { display: block; border-radius: 2px; }
+  .dark-bg { background: #1a1a1a; padding: 20px; border-radius: 8px; }
+  .light-bg { background: #d8cfc4; padding: 20px; border-radius: 8px; }
+  .changes { max-width: 640px; margin: 0 auto 32px; background: #1a1612; border: 1px solid #3a2a1a; border-radius: 6px; padding: 16px 24px; }
+  .changes h3 { color: #ff8a40; margin: 0 0 10px; font-size: 14px; }
+  .changes ul { margin: 0; padding-left: 18px; color: #aaa; font-size: 13px; line-height: 1.8; }
+  .changes ul li span { color: #ff8a40; }
+</style>
+</head>
+<body>
+
+<h2>sysmon-widget — proposed changes</h2>
+<p class="subtitle">Mockup of all four requested changes together</p>
+
+<div class="changes">
+  <h3>What changed</h3>
+  <ul>
+    <li><span>Hour markers</span> — circles → triangles tiling the outer edge, forming a hard border</li>
+    <li><span>Minute strips</span> — capped so they never cross into the border triangle zone</li>
+    <li><span>Minute number</span> — moved to midpoint between corner and border edge; rendered in amber-white (dark) or dark brown (light) instead of punched-through</li>
+    <li><span>Right-click menu</span> — snap positions + light/dark toggle + quit (shown on widget, not just tray)</li>
+  </ul>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <div class="panel-label">Dark mode — 30 min, 3 hrs</div>
+    <div class="dark-bg">
+      <canvas id="dark1" width="200" height="200"></canvas>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">Dark mode — 52 min, 8 hrs</div>
+    <div class="dark-bg">
+      <canvas id="dark2" width="200" height="200"></canvas>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">Light mode — 30 min, 3 hrs</div>
+    <div class="light-bg">
+      <canvas id="light1" width="200" height="200"></canvas>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">Light mode — 52 min, 8 hrs</div>
+    <div class="light-bg">
+      <canvas id="light2" width="200" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+function drawWidget(canvas, { lightMode, minutes, hours, dim = false }) {
+  const ctx = canvas.getContext('2d');
+  const S = canvas.width;
+  const BORDER = S * 0.10;
+
+  // TR position: apex top-right, hyp from (0,0) to (S,S)
+  const ax = S, ay = 0;
+  const v1x = 0, v1y = 0;
+  const v2x = S, v2y = S;
+
+  ctx.clearRect(0, 0, S, S);
+  ctx.save();
+
+  // Clip to triangle
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(v1x, v1y);
+  ctx.lineTo(v2x, v2y);
+  ctx.closePath();
+  ctx.clip();
+
+  // Background gradient
+  const grad = ctx.createRadialGradient(ax, ay, 0, ax, ay, S * 0.95);
+  if (lightMode) {
+    grad.addColorStop(0, 'rgba(240,220,200,0.55)');
+    grad.addColorStop(1, 'rgba(200,180,160,0.35)');
+  } else {
+    grad.addColorStop(0, 'rgba(24,18,16,0.40)');
+    grad.addColorStop(1, 'rgba(8,6,6,0.22)');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, S, S);
+
+  // Minute cap
+  const bmx = (v1x + v2x) / 2, bmy = (v1y + v2y) / 2;
+  const apexDist = Math.hypot(bmx - ax, bmy - ay);
+  const maxT = Math.max(0, 1 - BORDER / apexDist);
+
+  // Minute strips
+  const stripAlpha = dim ? 0.18 : 0.43;
+  for (let i = 0; i < minutes; i++) {
+    const gap = 0.002;
+    const ta = (i / 60) * maxT;
+    const tb = ((i + 1) / 60 - gap) * maxT;
+    ctx.beginPath();
+    ctx.moveTo(ax + ta*(v1x-ax), ay + ta*(v1y-ay));
+    ctx.lineTo(ax + tb*(v1x-ax), ay + tb*(v1y-ay));
+    ctx.lineTo(ax + tb*(v2x-ax), ay + tb*(v2y-ay));
+    ctx.lineTo(ax + ta*(v2x-ax), ay + ta*(v2y-ay));
+    ctx.closePath();
+    ctx.fillStyle = dim ? `rgba(80,35,10,${stripAlpha})` : `rgba(255,110,40,${stripAlpha})`;
+    ctx.fill();
+  }
+
+  // Hour triangles along hypotenuse
+  const sx = v1x, sy = v1y, ex = v2x, ey = v2y;
+  const ddx = ex-sx, ddy = ey-sy;
+  const hlen = Math.hypot(ddx, ddy);
+  const ux = ddx/hlen, uy = ddy/hlen;
+  // Inward normal toward apex
+  let nx = -uy, ny = ux;
+  const tcvx = ax - (sx+ex)/2, tcvy = ay - (sy+ey)/2;
+  if (nx*tcvx + ny*tcvy < 0) { nx = uy; ny = -ux; }
+
+  const step = hlen / 12;
+  for (let i = 0; i < 12; i++) {
+    const plx = sx + ux*i*step, ply = sy + uy*i*step;
+    const prx = sx + ux*(i+1)*step, pry = sy + uy*(i+1)*step;
+    const pax = (plx+prx)/2 + nx*BORDER;
+    const pay = (ply+pry)/2 + ny*BORDER;
+
+    ctx.beginPath();
+    ctx.moveTo(plx, ply);
+    ctx.lineTo(prx, pry);
+    ctx.lineTo(pax, pay);
+    ctx.closePath();
+
+    if (i < hours) {
+      ctx.fillStyle = dim ? `rgba(80,35,10,0.92)` : `rgba(255,110,40,0.92)`;
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = dim ? 'rgba(255,110,40,0.18)' : 'rgba(255,110,40,0.37)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Minute number — readable, not punched through
+  const txt = String(minutes % 60).padStart(2, '0');
+  const fs = S * 0.145;
+  ctx.font = `bold ${fs}px "Cascadia Mono", "Courier New", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // center = midpoint between apex and base midpoint
+  const ncx = (ax + bmx) / 2;
+  const ncy = (ay + bmy) / 2;
+
+  const dimScale = dim ? 0.6 : 1.0;
+  if (lightMode) {
+    ctx.strokeStyle = `rgba(20,10,0,${0.4 * dimScale})`;
+    ctx.lineWidth = S * 0.009;
+    ctx.strokeText(txt, ncx, ncy);
+    ctx.fillStyle = `rgba(50,30,10,${0.82 * dimScale})`;
+    ctx.fillText(txt, ncx, ncy);
+  } else {
+    ctx.strokeStyle = `rgba(15,8,4,${0.47 * dimScale})`;
+    ctx.lineWidth = S * 0.009;
+    ctx.strokeText(txt, ncx, ncy);
+    ctx.fillStyle = `rgba(255,210,160,${0.67 * dimScale})`;
+    ctx.fillText(txt, ncx, ncy);
+  }
+
+  ctx.restore();
+}
+
+drawWidget(document.getElementById('dark1'),  { lightMode: false, minutes: 30, hours: 3 });
+drawWidget(document.getElementById('dark2'),  { lightMode: false, minutes: 52, hours: 8 });
+drawWidget(document.getElementById('light1'), { lightMode: true,  minutes: 30, hours: 3 });
+drawWidget(document.getElementById('light2'), { lightMode: true,  minutes: 52, hours: 8 });
+</script>
+</body>
+</html>

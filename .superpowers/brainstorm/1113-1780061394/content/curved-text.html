@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Curved Text Mockup</title>
+<style>
+  body { margin: 0; background: #111; font-family: 'Segoe UI', sans-serif; color: #ccc; }
+  h2 { text-align: center; color: #ff8a40; margin: 24px 0 4px; font-size: 18px; }
+  .subtitle { text-align: center; color: #777; font-size: 13px; margin: 0 0 28px; }
+  .row { display: flex; justify-content: center; gap: 36px; flex-wrap: wrap; margin-bottom: 32px; }
+  .panel { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .panel-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
+  .dark-bg  { background: #1a1a1a; border-radius: 4px; }
+  .light-bg { background: #ccc4b8; border-radius: 4px; }
+  .section-head { text-align: center; color: #ff8a40; font-size: 12px; margin: 8px 0 20px;
+                  text-transform: uppercase; letter-spacing: 2px;
+                  border-top: 1px solid #2a1e10; padding-top: 22px; }
+</style>
+</head>
+<body>
+
+<h2>Curved text along the outer edge</h2>
+<p class="subtitle">Text follows the arc · 8 hour bands · minute sweep</p>
+
+<p class="section-head">Quarter circle — corner positions</p>
+<div class="row">
+  <div class="panel">
+    <div class="panel-label">TR dark · 2h 35m</div>
+    <div class="dark-bg"><canvas id="a" width="220" height="220"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">TR dark · 6h 50m</div>
+    <div class="dark-bg"><canvas id="b" width="220" height="220"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">TR light · 2h 35m</div>
+    <div class="light-bg"><canvas id="c" width="220" height="220"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">BL dark · 2h 35m</div>
+    <div class="dark-bg"><canvas id="d" width="220" height="220"></canvas></div>
+  </div>
+</div>
+
+<p class="section-head">Half circle — top/bottom edge</p>
+<div class="row">
+  <div class="panel">
+    <div class="panel-label">Top dark · 2h 35m</div>
+    <div class="dark-bg"><canvas id="e" width="280" height="160"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">Top dark · 6h 50m</div>
+    <div class="dark-bg"><canvas id="f" width="280" height="160"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">Top light · 2h 35m</div>
+    <div class="light-bg"><canvas id="g" width="280" height="160"></canvas></div>
+  </div>
+</div>
+
+<script>
+const ONES = ['zero','one','two','three','four','five','six','seven','eight','nine',
+              'ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen',
+              'seventeen','eighteen','nineteen'];
+const TENS = ['','','twenty','thirty','forty','fifty'];
+function n2w(n) {
+  if (n < 20) return ONES[n];
+  return n % 10 === 0 ? TENS[Math.floor(n/10)] : TENS[Math.floor(n/10)] + '-' + ONES[n%10];
+}
+function timeStr(h, m) {
+  const hw = n2w(h) + (h === 1 ? ' hour' : ' hours');
+  const mw = n2w(m) + (m === 1 ? ' minute' : ' minutes');
+  if (h === 0) return mw;
+  if (m === 0) return hw;
+  return hw + '  ' + mw;
+}
+
+// Draw curved text along an arc.
+// r = radius to draw character midpoints at
+// startAngle, spanAngle in radians, clockwise
+function arcText(ctx, text, cx, cy, r, startAngle, spanAngle, fontSize, color) {
+  ctx.save();
+  ctx.font = `${fontSize}px 'Segoe UI', sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+
+  const widths = Array.from(text).map(ch => ctx.measureText(ch).width);
+  const totalW = widths.reduce((a, b) => a + b, 0);
+  const textSpan = totalW / r;
+  let a = startAngle + (spanAngle - textSpan) / 2;
+
+  Array.from(text).forEach((ch, i) => {
+    const mid = a + widths[i] / (2 * r);
+    ctx.save();
+    ctx.translate(cx + r * Math.cos(mid), cy + r * Math.sin(mid));
+    ctx.rotate(mid + Math.PI / 2);
+    ctx.fillText(ch, 0, 0);
+    ctx.restore();
+    a += widths[i] / r;
+  });
+  ctx.restore();
+}
+
+// Draw the complete widget.
+// cx,cy  = arc center (the screen corner in real use)
+// startDeg, endDeg = arc extent in degrees (clockwise, 0=east)
+// R      = full radius of the widget
+// hours, minutes, lightMode, dim
+function drawWidget(canvas, { cx, cy, startDeg, endDeg, R, hours, minutes, lightMode, dim }) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const s = startDeg * Math.PI / 180;
+  const e = endDeg   * Math.PI / 180;
+  const span = e - s;
+
+  const BANDS     = 8;
+  const TEXT_FRAC = 0.22;          // outer fraction reserved for text ring
+  const BAND_R    = R * (1 - TEXT_FRAC);  // bands live 0 → BAND_R
+  const bandW     = BAND_R / BANDS;
+  const TEXT_R    = R * (1 - TEXT_FRAC * 0.45); // midpoint of text ring
+  const fontSize  = Math.max(7, R * TEXT_FRAC * 0.38);
+
+  const neon     = dim ? [80,35,10]    : [255,110,40];
+  const neonStr  = `rgba(${neon.join(',')},`;
+  const hoursC   = Math.min(hours, BANDS);
+  const minFrac  = Math.min(minutes / 60, 1);
+
+  // ── Background of the whole arc ──────────────────────────────────────
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, R, s, e);
+  ctx.closePath();
+  const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  if (lightMode) {
+    bg.addColorStop(0, 'rgba(240,220,200,0.55)');
+    bg.addColorStop(1, 'rgba(200,180,160,0.32)');
+  } else {
+    bg.addColorStop(0, 'rgba(28,20,18,0.50)');
+    bg.addColorStop(1, 'rgba(10,7,6,0.28)');
+  }
+  ctx.fillStyle = bg;
+  ctx.fill();
+
+  // ── Hour bands ───────────────────────────────────────────────────────
+  for (let i = 0; i < BANDS; i++) {
+    const r1 = i * bandW;
+    const r2 = (i + 1) * bandW;
+
+    ctx.beginPath();
+    if (r1 > 0) {
+      ctx.moveTo(cx + r1 * Math.cos(s), cy + r1 * Math.sin(s));
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.arc(cx, cy, r1, e, s, true);
+    } else {
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.lineTo(cx, cy);
+    }
+    ctx.closePath();
+
+    if (i < hoursC) {
+      // completed band
+      ctx.fillStyle = neonStr + (dim ? '0.70)' : '0.86)');
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, r2, s, e); ctx.stroke();
+    } else if (i === hoursC) {
+      // current band — minute sweep
+      ctx.fillStyle = lightMode ? 'rgba(200,180,160,0.15)' : 'rgba(255,110,40,0.06)';
+      ctx.fill();
+      ctx.strokeStyle = neonStr + '0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (r1 > 0) {
+        ctx.moveTo(cx + r1 * Math.cos(s), cy + r1 * Math.sin(s));
+        ctx.arc(cx, cy, r2, s, e);
+        ctx.arc(cx, cy, r1, e, s, true);
+      } else {
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r2, s, e);
+        ctx.lineTo(cx, cy);
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      if (minFrac > 0) {
+        const sweepEnd = s + span * minFrac;
+        ctx.beginPath();
+        if (r1 > 0) {
+          ctx.moveTo(cx + r1 * Math.cos(s), cy + r1 * Math.sin(s));
+          ctx.arc(cx, cy, r2, s, sweepEnd);
+          ctx.arc(cx, cy, r1, sweepEnd, s, true);
+        } else {
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, r2, s, sweepEnd);
+          ctx.lineTo(cx, cy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = neonStr + (dim ? '0.52)' : '0.68)');
+        ctx.fill();
+      }
+    } else {
+      // future band
+      ctx.strokeStyle = neonStr + (dim ? '0.06)' : '0.11)');
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // ── Text ring separator arc ──────────────────────────────────────────
+  ctx.beginPath();
+  ctx.arc(cx, cy, BAND_R, s, e);
+  ctx.strokeStyle = neonStr + (dim ? '0.15)' : '0.22)');
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // ── Radial edge lines ────────────────────────────────────────────────
+  ctx.strokeStyle = neonStr + (dim ? '0.18)' : '0.28)');
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R*Math.cos(s), cy + R*Math.sin(s)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R*Math.cos(e), cy + R*Math.sin(e)); ctx.stroke();
+
+  // ── Curved text ──────────────────────────────────────────────────────
+  const label = timeStr(hours, minutes);
+  const textColor = lightMode
+    ? `rgba(50,30,10,${dim ? 0.55 : 0.82})`
+    : `rgba(255,205,155,${dim ? 0.48 : 0.78})`;
+  arcText(ctx, label, cx, cy, TEXT_R, s, span, fontSize, textColor);
+}
+
+// Quarter circles
+drawWidget(document.getElementById('a'), { cx:220, cy:0,   startDeg:90,  endDeg:180, R:220, hours:2, minutes:35, lightMode:false, dim:false });
+drawWidget(document.getElementById('b'), { cx:220, cy:0,   startDeg:90,  endDeg:180, R:220, hours:6, minutes:50, lightMode:false, dim:false });
+drawWidget(document.getElementById('c'), { cx:220, cy:0,   startDeg:90,  endDeg:180, R:220, hours:2, minutes:35, lightMode:true,  dim:false });
+drawWidget(document.getElementById('d'), { cx:0,   cy:0,   startDeg:0,   endDeg:90,  R:220, hours:2, minutes:35, lightMode:false, dim:false });
+
+// Half circles — T position: center top-center, arc 0→180 sweeping downward
+function drawHalf(canvas, { hours, minutes, lightMode, dim }) {
+  const W = canvas.width, H = canvas.height;
+  const R = W / 2;
+  drawWidget(canvas, { cx: R, cy: 0, startDeg: 0, endDeg: 180, R, hours, minutes, lightMode, dim });
+}
+drawHalf(document.getElementById('e'), { hours:2, minutes:35, lightMode:false, dim:false });
+drawHalf(document.getElementById('f'), { hours:6, minutes:50, lightMode:false, dim:false });
+drawHalf(document.getElementById('g'), { hours:2, minutes:35, lightMode:true,  dim:false });
+</script>
+</body>
+</html>

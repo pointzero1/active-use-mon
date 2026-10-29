@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Circle Redesign Mockup</title>
+<style>
+  body { margin: 0; background: #111; font-family: 'Segoe UI', sans-serif; color: #ccc; }
+  h2 { text-align: center; color: #ff8a40; margin: 24px 0 4px; font-size: 18px; }
+  .subtitle { text-align: center; color: #777; font-size: 13px; margin: 0 0 28px; }
+  .row { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin-bottom: 36px; }
+  .panel { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .panel-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
+  canvas { display: block; }
+  .dark-bg  { background: #1a1a1a; border-radius: 4px; }
+  .light-bg { background: #cfc6bb; border-radius: 4px; }
+  .section-head { text-align: center; color: #ff8a40; font-size: 13px; margin: 8px 0 18px;
+                  text-transform: uppercase; letter-spacing: 2px; border-top: 1px solid #2a1e10;
+                  padding-top: 24px; }
+  .note { max-width: 620px; margin: 0 auto 28px; color: #888; font-size: 12px; text-align: center; line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<h2>Quarter &amp; Half Circle — Redesign Mockup</h2>
+<p class="subtitle">8 hour-bands (concentric rings) · minute sweep · word text</p>
+
+<p class="section-head">Corner positions — quarter circle</p>
+<p class="note">Bands fill from the outer edge inward as hours complete. Minutes fan clockwise across the innermost unfilled band. Text in the inner arc body.</p>
+
+<div class="row">
+  <div class="panel">
+    <div class="panel-label">TR — Dark — 2h 35m</div>
+    <div class="dark-bg"><canvas id="c_tr_dark" width="200" height="200"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">TR — Dark — 6h 50m</div>
+    <div class="dark-bg"><canvas id="c_tr_dark2" width="200" height="200"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">TR — Light — 2h 35m</div>
+    <div class="light-bg"><canvas id="c_tr_light" width="200" height="200"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">BL — Dark — 2h 35m</div>
+    <div class="dark-bg"><canvas id="c_bl_dark" width="200" height="200"></canvas></div>
+  </div>
+</div>
+
+<p class="section-head">Edge position — half circle</p>
+<p class="note">Same logic: 8 bands, minute sweep, text inside the half-circle body.</p>
+
+<div class="row">
+  <div class="panel">
+    <div class="panel-label">Top — Dark — 2h 35m</div>
+    <div class="dark-bg"><canvas id="c_top_dark" width="200" height="110"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">Top — Dark — 6h 50m</div>
+    <div class="dark-bg"><canvas id="c_top_dark2" width="200" height="110"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-label">Top — Light — 2h 35m</div>
+    <div class="light-bg"><canvas id="c_top_light" width="200" height="110"></canvas></div>
+  </div>
+</div>
+
+<script>
+const NEON      = 'rgba(255,110,40,';
+const NEON_DIM  = 'rgba(80,35,10,';
+const BANDS     = 8;
+
+function numToWords(n) {
+  const ones = ['zero','one','two','three','four','five','six','seven','eight',
+                'nine','ten','eleven','twelve','thirteen','fourteen','fifteen',
+                'sixteen','seventeen','eighteen','nineteen'];
+  const tens = ['','','twenty','thirty','forty','fifty'];
+  if (n < 20) return ones[n];
+  if (n % 10 === 0) return tens[Math.floor(n/10)];
+  return tens[Math.floor(n/10)] + '-' + ones[n % 10];
+}
+
+function timeWords(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const hWord = numToWords(h) + (h === 1 ? ' hour' : ' hours');
+  const mWord = numToWords(m) + (m === 1 ? ' minute' : ' minutes');
+  if (h === 0) return mWord;
+  if (m === 0) return hWord;
+  return hWord + '\n' + mWord;
+}
+
+// Draw a quarter-circle widget.
+// cx,cy = arc center (the corner of screen)
+// startDeg, endDeg = arc angle range in degrees (clockwise, 0=east)
+// R = radius (= canvas size in that corner)
+// hours, minutes = time to display
+// lightMode, dim = theme
+function drawQuarter(canvas, { cx, cy, startDeg, endDeg, R, hours, minutes, lightMode, dim }) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const s = (startDeg * Math.PI) / 180;
+  const e = (endDeg   * Math.PI) / 180;
+  const span = e - s; // always positive, clockwise
+  const bandW = R / BANDS;
+
+  const col = (dim ? NEON_DIM : NEON);
+
+  // Completed hours fill from outermost band inward (or innermost outward?)
+  // Here: fill from innermost outward so it feels like "progress accumulates"
+  const hoursComplete = Math.min(hours, BANDS);
+  const minuteFrac = Math.min(minutes / 60, 1.0);
+
+  for (let i = 0; i < BANDS; i++) {
+    const r1 = (i) * bandW;
+    const r2 = (i + 1) * bandW;
+
+    if (i < hoursComplete) {
+      // Completed band — fully lit
+      ctx.beginPath();
+      ctx.moveTo(cx + r1 * Math.cos(s), cy + r1 * Math.sin(s));
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.arc(cx, cy, r1, e, s, true);
+      ctx.closePath();
+      ctx.fillStyle = col + (dim ? '0.72)' : '0.88)');
+      ctx.fill();
+      // Band separator line
+      ctx.beginPath();
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.strokeStyle = dim ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.2)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else if (i === hoursComplete && hoursComplete < BANDS) {
+      // Current partial band — minute sweep
+      const sweepEnd = s + span * minuteFrac;
+
+      // Dim background of this band
+      ctx.beginPath();
+      ctx.moveTo(cx + r1 * Math.cos(s), cy + r1 * Math.sin(s));
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.arc(cx, cy, r1, e, s, true);
+      ctx.closePath();
+      if (lightMode) {
+        ctx.fillStyle = 'rgba(180,150,120,0.18)';
+      } else {
+        ctx.fillStyle = 'rgba(255,110,40,0.07)';
+      }
+      ctx.fill();
+      ctx.strokeStyle = col + '0.20)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Swept portion
+      if (minuteFrac > 0) {
+        ctx.beginPath();
+        ctx.moveTo(cx + r1 * Math.cos(s), cy + r1 * Math.sin(s));
+        ctx.arc(cx, cy, r2, s, sweepEnd);
+        ctx.arc(cx, cy, r1, sweepEnd, s, true);
+        ctx.closePath();
+        ctx.fillStyle = col + (dim ? '0.55)' : '0.70)');
+        ctx.fill();
+      }
+
+      // Separator arc at outer edge of this band
+      ctx.beginPath();
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.strokeStyle = col + '0.25)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+    } else {
+      // Future band — faint outline only
+      ctx.beginPath();
+      ctx.moveTo(cx + r1 * Math.cos(s), cy + r1 * Math.sin(s));
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.arc(cx, cy, r1, e, s, true);
+      ctx.closePath();
+      ctx.strokeStyle = col + (dim ? '0.06)' : '0.12)');
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Radial edge lines (the straight sides of the quarter/half circle)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + R * Math.cos(s), cy + R * Math.sin(s));
+  ctx.strokeStyle = col + (dim ? '0.15)' : '0.25)');
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + R * Math.cos(e), cy + R * Math.sin(e));
+  ctx.stroke();
+
+  // Word text inside the arc body
+  // Position: at ~40% radius, midpoint angle, inside visible arc
+  const midAngle = s + span / 2;
+  const textR = R * 0.38;
+  const tx = cx + textR * Math.cos(midAngle);
+  const ty = cy + textR * Math.sin(midAngle);
+
+  const totalSec = hours * 3600 + minutes * 60;
+  const words = timeWords(totalSec).split('\n');
+
+  const fontSize = Math.max(8, R * 0.075);
+  ctx.font = `${fontSize}px 'Segoe UI', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (lightMode) {
+    ctx.fillStyle = `rgba(40,25,10,${dim ? 0.55 : 0.80})`;
+  } else {
+    ctx.fillStyle = `rgba(255,200,150,${dim ? 0.45 : 0.70})`;
+  }
+
+  const lineH = fontSize * 1.4;
+  const startY = ty - (words.length - 1) * lineH / 2;
+  words.forEach((line, i) => {
+    ctx.fillText(line, tx, startY + i * lineH);
+  });
+}
+
+// Quarter circles
+drawQuarter(document.getElementById('c_tr_dark'), {
+  cx: 200, cy: 0, startDeg: 90, endDeg: 180, R: 200,
+  hours: 2, minutes: 35, lightMode: false, dim: false
+});
+drawQuarter(document.getElementById('c_tr_dark2'), {
+  cx: 200, cy: 0, startDeg: 90, endDeg: 180, R: 200,
+  hours: 6, minutes: 50, lightMode: false, dim: false
+});
+drawQuarter(document.getElementById('c_tr_light'), {
+  cx: 200, cy: 0, startDeg: 90, endDeg: 180, R: 200,
+  hours: 2, minutes: 35, lightMode: true, dim: false
+});
+// BL: center at bottom-left, arc goes from 270° (north) to 0°/360° (east)
+drawQuarter(document.getElementById('c_bl_dark'), {
+  cx: 0, cy: 200, startDeg: 270, endDeg: 360, R: 200,
+  hours: 2, minutes: 35, lightMode: false, dim: false
+});
+
+// Half circles (Top position: center at top-center, arc 0°→180° pointing down)
+function drawHalf(canvas, { hours, minutes, lightMode, dim }) {
+  const W = canvas.width, H = canvas.height;
+  const R = W / 2;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W / 2, cy = 0;
+  const s = 0, e = Math.PI; // 0° to 180° = east to west, sweeping south
+  const span = Math.PI;
+  const bandW = R / BANDS;
+  const col = (dim ? NEON_DIM : NEON);
+
+  const hoursComplete = Math.min(hours, BANDS);
+  const minuteFrac = Math.min(minutes / 60, 1.0);
+
+  for (let i = 0; i < BANDS; i++) {
+    const r1 = i * bandW;
+    const r2 = (i + 1) * bandW;
+
+    if (i < hoursComplete) {
+      ctx.beginPath();
+      ctx.moveTo(cx + r1, cy);
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.arc(cx, cy, r1, e, s, true);
+      ctx.closePath();
+      ctx.fillStyle = col + (dim ? '0.72)' : '0.88)');
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else if (i === hoursComplete && hoursComplete < BANDS) {
+      const sweepEnd = s + span * minuteFrac;
+      ctx.beginPath();
+      ctx.moveTo(cx + r1, cy);
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.arc(cx, cy, r1, e, s, true);
+      ctx.closePath();
+      ctx.fillStyle = lightMode ? 'rgba(180,150,120,0.18)' : 'rgba(255,110,40,0.07)';
+      ctx.fill();
+      ctx.strokeStyle = col + '0.20)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      if (minuteFrac > 0) {
+        ctx.beginPath();
+        ctx.moveTo(cx + r1, cy);
+        ctx.arc(cx, cy, r2, s, sweepEnd);
+        ctx.arc(cx, cy, r1, sweepEnd, s, true);
+        ctx.closePath();
+        ctx.fillStyle = col + (dim ? '0.55)' : '0.70)');
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.strokeStyle = col + '0.25)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(cx + r1, cy);
+      ctx.arc(cx, cy, r2, s, e);
+      ctx.arc(cx, cy, r1, e, s, true);
+      ctx.closePath();
+      ctx.strokeStyle = col + (dim ? '0.06)' : '0.12)');
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  // Flat baseline
+  ctx.beginPath();
+  ctx.moveTo(cx - R, cy);
+  ctx.lineTo(cx + R, cy);
+  ctx.strokeStyle = col + '0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Word text
+  const totalSec = hours * 3600 + minutes * 60;
+  const words = timeWords(totalSec).split('\n');
+  const fontSize = Math.max(8, R * 0.10);
+  ctx.font = `${fontSize}px 'Segoe UI', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = lightMode
+    ? `rgba(40,25,10,${dim ? 0.55 : 0.80})`
+    : `rgba(255,200,150,${dim ? 0.45 : 0.70})`;
+
+  const lineH = fontSize * 1.4;
+  const textY = R * 0.5;
+  const startY = textY - (words.length - 1) * lineH / 2;
+  words.forEach((line, i) => ctx.fillText(line, cx, startY + i * lineH));
+}
+
+drawHalf(document.getElementById('c_top_dark'),  { hours: 2, minutes: 35, lightMode: false, dim: false });
+drawHalf(document.getElementById('c_top_dark2'), { hours: 6, minutes: 50, lightMode: false, dim: false });
+drawHalf(document.getElementById('c_top_light'), { hours: 2, minutes: 35, lightMode: true,  dim: false });
+</script>
+</body>
+</html>
